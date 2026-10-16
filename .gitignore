@@ -1,0 +1,16 @@
+# 依赖与构建产物
+node_modules/
+*.tgz
+
+# 编辑器与系统
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# 本项目特有的临时文件
+# 自查/诊断脚本输出的临时中间文件（如 _syntax_check.cjs 之类）
+_*.cjs
+_*.mjs

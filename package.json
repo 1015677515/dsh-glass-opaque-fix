@@ -1,0 +1,45 @@
+{
+  "name": "dsh-glass-opaque-fix",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Restores opaque backgrounds on floating panels that the liquid-glass theme (dsh-plugin-wallpaper-engine) has made translucent. Ships one working recipe for dsh-cost-meter and documents how to add more.",
+  "main": "./index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "theme",
+    "glass",
+    "liquid-glass",
+    "wallpaper-engine",
+    "opacity",
+    "compatibility"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/1015677515/dsh-glass-opaque-fix.git"
+  },
+  "homepage": "https://github.com/1015677515/dsh-glass-opaque-fix#readme",
+  "author": "holo <1015677515@qq.com>",
+  "license": "MIT"
+}

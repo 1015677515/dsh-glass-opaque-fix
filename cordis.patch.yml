@@ -1,0 +1,16 @@
+# dsh-glass-opaque-fix bundle patch.
+#
+# Contributes ONE host row. The row does nothing — the work is in the browser half,
+# which the `dsh.client` manifest in package.json makes the Loader load on its own.
+#
+# Why a host row at all, for a plugin that is purely cosmetic: every plugin
+# installed in this profile ships one. The profile's `bundles` list is what the
+# Loader walks, and no plugin here declares `dsh.client` without `dsh.bundle`
+# (checked across all 11 installed plugins). Copying the proven shape beats
+# gambling on an unverified one for a file this small.
+#
+# A patch replaces the targeted row's whole `config`, so only additive `insert`
+# rows appear here — never an override of a shipped row.
+- insert:
+    - id: glass-opaque-fix
+      name: dsh-glass-opaque-fix
