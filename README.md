@@ -313,3 +313,324 @@ mklink /J "C:\Users\<你>\.dsh\profiles\desktop\node_modules\dsh-glass-opaque-fi
 ## 许可证
 
 MIT
+
+---
+
+<a id="english"></a>
+
+# English
+
+Restore opaque backgrounds on floating panels that a liquid-glass theme has made translucent.
+
+A copy-paste template: **change one selector** and you have fixed another plugin's incompatibility with the glass theme.
+
+> Developed independently by an AI agent running on DeepSeek Harness.
+
+---
+
+## 1. The problem
+
+The liquid-glass theme plugin (`dsh-plugin-wallpaper-engine`) produces its see-through look by **rewriting the host's own background aliases**.
+
+Under a set of `body[data-we-glass-page]` rules it remaps the host's
+
+```
+--dsw-alias-bg-layer-1
+--dsw-alias-bg-layer-2
+--dsw-alias-bg-layer-3
+```
+
+onto **translucent films** composed with `color-mix(…, transparent)`.
+
+**That is a legitimate design choice** — it is how the wallpaper shows through.
+
+**But it is a global change.** Any other plugin that paints a panel with those aliases **becomes translucent along with it** — whether or not it has anything to do with wallpapers.
+
+### Consequences
+
+| Symptom | Why |
+|---|---|
+| Dialogs and popovers turn translucent | Text sits on top of the wallpaper and becomes hard to read |
+| **The plugin offers no switch for it** | That plugin was written against a host whose aliases were opaque |
+| The user is stuck | The only options are turning the wallpaper off, or living with unreadable panels |
+
+**Neither plugin is at fault.** Two correct designs collide; this repository cleans up after the collision.
+
+---
+
+## 2. Why editing the theme or the plugin's settings does not help
+
+We tested the two most intuitive routes. **Both are dead ends.**
+
+### Route one: the theme's own "popover opacity" setting
+
+`dsh-plugin-wallpaper-engine` **does** offer a 「浮层玻璃 · 玻璃透明度」 / *Popover glass · glass opacity* setting.
+
+**It cannot reach third-party popovers.** Its selectors are exactly three groups:
+
+```
+body[data-we-glass-floaters] [data-install-registry]    ← DSH's own install-registry panel
+body[data-we-glass-floaters] .we-update-notice          ← the theme's own update notice
+body[data-we-glass-floaters] .we-repo-panel             ← the theme's own wallpaper drawer
+```
+
+All `we-`-prefixed components of its own, or official ones. **No `[role=dialog]`, no general matcher** — so third-party popovers are outside its jurisdiction.
+
+The slider also **cannot reach opacity** in the first place:
+
+```js
+// wallpaper-engine 1.3.3
+const glassAlpha = Math.max(0.10, 0.25 - (selection.glassAlpha / 100) * 0.15);
+```
+
+| Slider | alpha | Effect |
+|---|---|---|
+| 0 | **0.25** | The most solid available — **still 25% transparent** |
+| 100 | 0.10 | Most transparent |
+
+**The floor is pinned at 0.25** — a readability guarantee in the theme, not a misconfiguration.
+
+### Route two: patching the affected plugin's files
+
+Our first attempt put a CSS rule **into the theme plugin's own bundle**:
+
+```css
+/* This is how it was fixed once. It no longer exists. */
+body[data-we-glass-page] .cm-stat-dialog { background: var(--we-panel-color) !important; }
+```
+
+**It lasted until the theme's next update** — measured: `1.3.2 → 1.3.3` erased the rule and the dialog went translucent again.
+
+**Why this is inevitable**: both sides of the conflict are **third-party plugins**, and **both update**.
+
+| Patch location | Who erases it |
+|---|---|
+| The theme's `lib/client.js` | A **theme** update |
+| The affected plugin's files | An update of **that** plugin |
+
+**The durable location is a third one: a plugin you own.** It belongs to neither side, so nobody overwrites it.
+
+---
+
+## 3. How the fix works
+
+Three steps. **None is optional.**
+
+### Step 1: use a colour that is never rewritten
+
+```
+❌ var(--dsw-alias-bg-layer-1)          ← the exact alias the theme turns translucent
+✅ var(--dsw-static-neutral-bluish-00)  ← never assigned by the theme; opaque by construction
+✅ var(--dsw-static-neutral-bluish-875) ← the dark-mode counterpart
+✅ var(--we-panel-color)                ← defined by the theme on top of those two; better tint
+```
+
+**Evidence**: searching the `wallpaper-engine 1.3.3` bundle for assignments to either `--dsw-static-neutral-bluish-*` returns **zero**. The theme does not touch them.
+
+So they are **opaque by construction**, with or without the wallpaper installed.
+
+The expression this plugin uses:
+
+```css
+background: var(--we-panel-color, var(--dsw-static-neutral-bluish-00, #ffffff)) !important;
+```
+
+It prefers the theme's panel colour — so the panel matches the tint of the surrounding glass UI — and falls back to the static neutral when the theme is absent.
+
+### Step 2: `!important`
+
+**This is required, not habitual.**
+
+The theme's token mapping is scoped under `body[data-we-glass-page]`, which **outranks a bare class selector**. Without `!important` the rule loses that comparison.
+
+### Step 3: list parents and children together
+
+If the popover has its own header or body, **list those too**:
+
+```css
+.cm-stat-dialog,
+.cm-stat-dialog .cm-stat-dialog-head,
+.cm-stat-dialog .cm-stat-dialog-body {
+  background: … !important;
+}
+```
+
+**Why**: a child's own `background` paints over its parent's. Setting only the parent leaves the child's area **still translucent** — visible as bands of light through the panel.
+
+---
+
+## 4. Fixing another plugin (operating guide for an AI)
+
+**The only file that changes is the `RECIPES` array in `client.js`.**
+
+### Steps
+
+```
+① Open the popover that looks translucent
+② DevTools → Elements → pick the popover → read its `class` attribute
+③ Add the class to RECIPES in client.js (as '.that-class')
+④ Restart DSH (client.js is read at startup)
+⑤ Check: the popover should no longer show the wallpaper through it
+⑥ If its header/body still glows → add those child selectors too
+```
+
+### The one place to edit
+
+Top of `client.js`:
+
+```js
+const RECIPES = [
+  {
+    id: 'cost-meter',
+    plugin: 'dsh-cost-meter',
+    note: '费用明细 dialog. Verified against 1.8.32.',
+    selectors: [
+      '.cm-stat-dialog',
+      '.cm-stat-dialog .cm-stat-dialog-head',
+      '.cm-stat-dialog .cm-stat-dialog-body',
+    ],
+  },
+  // ← add new entries here
+  // {
+  //   id: 'some-plugin',
+  //   plugin: 'dsh-some-plugin',
+  //   note: 'Settings dialog; selector taken from DevTools.',
+  //   selectors: ['.some-dialog'],
+  // },
+];
+```
+
+### Finding the right selector
+
+| Goal | How |
+|---|---|
+| Locate the popover element | DevTools → the element-picker icon → click the popover |
+| Read its class | Look at the `class="…"` attribute; prefer the **outermost** panel element |
+| Confirm it really is translucent | DevTools → Computed → is `background-color`'s alpha below 1? |
+| Confirm the fix took | After adding the rule, is `background-color` now opaque? |
+
+### Troubleshooting: rule added, no effect
+
+Check these three, in order:
+
+| Check | How |
+|---|---|
+| **Was the stylesheet injected?** | DevTools → Elements → search for `style[data-plugin-css="dsh-glass-opaque-fix"]` |
+| **Did the selector match?** | In the Console: `document.querySelectorAll('.your-selector').length` — should be ≥ 1 |
+| **Is the priority high enough?** | In Computed, is the `background-color` value struck through? Struck through means another rule won |
+
+---
+
+## 5. Recorded recipes
+
+| Plugin | Popover | Selectors | Status |
+|---|---|---|---|
+| [`dsh-cost-meter`](https://github.com/) | 费用明细 (cost details) dialog | `.cm-stat-dialog` + `.cm-stat-dialog-head` + `.cm-stat-dialog-body` | ✅ **In use** (1.8.32) |
+
+**An honest note on status**: ✅ means the recipe **actually fixed the problem** on the development machine. If you contribute an entry, state in `note` **which plugin version you verified** — **this repository's value is that its recipes are trustworthy**, and an unverified selector is worse than none.
+
+### Why these plugins are named
+
+Because **without naming them there is nothing to copy** — "some popover in some plugin" gives neither an AI nor a human enough to find a selector.
+
+**None of these plugins did anything wrong.** The translucency comes from the glass theme's global scope; the affected plugins merely used the host's aliases according to their documented meaning. This repository **cleans up in a third location** — it does not identify a defect in anyone.
+
+---
+
+## 6. Installing
+
+### Option 1: from a local directory (recommended for development)
+
+1. Clone or copy this repository anywhere
+2. Add two entries to your profile's `package.json`:
+
+```jsonc
+{
+  "dependencies": {
+    "dsh-glass-opaque-fix": "link:A:/your/path/dsh-glass-opaque-fix"
+  },
+  "dsh": {
+    "profile": {
+      "bundles": [
+        // …
+        "dsh-glass-opaque-fix"
+      ]
+    }
+  }
+}
+```
+
+3. Create a directory link under `profile/node_modules/` (a Junction on Windows):
+
+```cmd
+mklink /J "C:\Users\<you>\.dsh\profiles\desktop\node_modules\dsh-glass-opaque-fix" "A:\your\path\dsh-glass-opaque-fix"
+```
+
+4. **Restart DSH**
+
+### Option 2: copy one recipe, install nothing
+
+If you only need to fix **one** plugin and would rather not install anything:
+
+1. Read section 4 and find the selector
+2. Paste the CSS into a plugin you already have
+3. Or into any stylesheet that gets loaded
+
+**Trade-off**: you may have to add it again when the theme or that plugin updates — which is exactly why this repository keeps the rule separate.
+
+### Requirements
+
+| Dependency | Requirement |
+|---|---|
+| DSH | A version that loads `dsh.client` plugins |
+| The theme plugin | Optional. Without it this plugin produces no visible change (the rule is still injected, but the backgrounds were opaque to begin with) |
+
+**No third-party dependencies, no build step.**
+
+---
+
+## 7. Design notes
+
+- **It only adds rules; it edits nobody's files.** That is the **only reason** it survives plugin updates. Any "while I'm here, let me also tweak the theme" approach lands right back in the original trap.
+- **Recipes live in one `RECIPES` array.** There is exactly one place to edit, and it is obvious which entry you changed — rather than scattered across hundreds of lines of CSS.
+- **Injection is tied to `ctx.effect`.** Unloading the plugin removes the stylesheet. A **deleted plugin that still restyles the page** is a worse failure than the translucency it fixed.
+- **No recipes means no `<style>` element at all.** An empty node would only give a future debugging session something to puzzle over.
+- **`note` is for humans and AIs; the code ignores it.** It still has to be accurate — the point of this repository is copying a recipe that works.
+- **Failing to apply beats failing to load.** A missing `document`, or a context without `ctx.effect`, exits quietly. DSH's load path is all-or-nothing, and taking the whole client down for a cosmetic rule is not a trade worth making.
+
+---
+
+## 8. Known limits
+
+| Limit | Detail |
+|---|---|
+| **Restart required after editing** | `client.js` is read at startup, so a selector change needs a DSH restart |
+| **Breaks if the class is renamed** | If the target plugin renames its popover class, the recipe stops matching — re-read the selector as in section 4 |
+| **Backgrounds only** | This plugin sets `background` only. If the popover's **borders, shadow or text** are also affected, they need their own rules |
+| **Not a general glass switch** | It applies only to the selectors **listed in `RECIPES`**; there is no blanket fallback |
+
+**Why no blanket fallback** (say, making every `[role=dialog]` opaque): that would also override the panels the theme is *supposed* to affect — its own settings window, the wallpaper drawer — turning off an effect the user asked for. **Listing targets precisely is a deliberate trade-off.**
+
+---
+
+## 9. Contributing
+
+**Additional recipes are welcome**, especially:
+
+- The same translucency problem in another plugin
+- A selector you have verified (state the **plugin version** in `note`)
+
+**Requirements**:
+
+1. Change only the relevant entry in `RECIPES` (or add one)
+2. `note` must state **which popover** and **which version you verified**
+3. Describe how you verified it (what you saw in DevTools)
+
+**Not accepted**: patches that write into the theme's or the affected plugin's files — that is precisely what this repository exists to avoid.
+
+---
+
+## Licence
+
+MIT
+
